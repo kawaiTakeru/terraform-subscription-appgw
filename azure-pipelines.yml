@@ -1,1 +1,57 @@
+trigger:
+  branches:
+    include:
+      - main
 
+pool:
+  vmImage: 'ubuntu-latest'     # ← Microsoft-hosted（Azure Pipelines）
+
+variables:
+  TF_VERSION: '1.6.6'          # ご希望どおり
+
+stages:
+  - stage: TerraformApply
+    jobs:
+      - job: Job
+        steps:
+          - checkout: self
+            displayName: '🔍 Checkout $(Build.Repository.Name)'
+
+          - script: |
+              echo "##[group]Step 1: Install Terraform $(TF_VERSION)"
+              set -eux
+              if ! command -v terraform >/dev/null 2>&1; then
+                curl -fsSL "https://releases.hashicorp.com/terraform/$(TF_VERSION)/terraform_$(TF_VERSION)_linux_amd64.zip" -o tf.zip
+                unzip -o tf.zip
+                sudo mv terraform /usr/local/bin/terraform
+                rm -f tf.zip
+              fi
+              terraform -version
+              echo "##[endgroup]"
+            displayName: '⚙️ Install Terraform'
+
+          - script: |
+              echo "##[group]Step 2: terraform init"
+              set -eux
+              cd terraform
+              terraform init -input=false
+              echo "##[endgroup]"
+
+              echo "##[group]Step 3: terraform plan"
+              terraform plan -out=tfplan -input=false
+              echo "##[endgroup]"
+
+              echo "##[group]Step 4: terraform apply"
+              terraform apply -auto-approve tfplan
+              echo "##[endgroup]"
+
+              echo "##[group]Step 5: 完了 ✅"
+              echo "✅ サブスクリプション作成成功 ✅"
+              echo "##[endgroup]"
+            displayName: '⚙️ Run Terraform'
+            env:
+              # Entra アプリ（サービスプリンシパル）の資格情報をパイプライン変数（Secret）から注入
+              ARM_CLIENT_ID:       $(ARM_CLIENT_ID)
+              ARM_CLIENT_SECRET:   $(ARM_CLIENT_SECRET)
+              ARM_TENANT_ID:       $(ARM_TENANT_ID)
+              ARM_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
